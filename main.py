@@ -1,14 +1,14 @@
-import random
-
 import pygame
 import typer
 
 from config import Config
+from content import Content
 
 CONFIG = Config.load_from_ini()
 
 
 def main(
+    n: int | None = typer.Option(None, "--n"),
     width: int | None = typer.Option(CONFIG.window_width, "--width"),
     height: int | None = typer.Option(CONFIG.window_height, "--height"),
     fps: int | None = typer.Option(CONFIG.fps, "--fps"),
@@ -30,6 +30,7 @@ def main(
     ),
 ):
     config = CONFIG.parse_cli(
+        n=n,
         window_width=width,
         window_height=height,
         fps=fps,
@@ -48,81 +49,102 @@ def main(
     run_game(config)
 
 
-def run_game(config: Config):
-    pygame.init()
+class Game:
+    def __init__(self, config: Config):
+        self.running = False
+        self.config = config
 
-    screen = pygame.display.set_mode(
-        (config.window_width, config.window_height)
-    )
+    def __enter__(self):
+        pygame.init()
 
-    pygame.display.set_caption("Configuration")
+        self.screen = pygame.display.set_mode(
+            (self.config.window_width, self.config.window_height)
+        )
+        pygame.display.set_caption("Screensaver")
 
-    clock = pygame.time.Clock()
+        self.clock = pygame.time.Clock()
 
-    font = pygame.font.Font(config.font_path, config.content_font_size)
-    text = font.render(config.content, True, config.content_text_color)
-    rect = text.get_rect(center=screen.get_rect().center)
+        self.dt = 0.0
 
-    bounces = 0
-    corners = 0
+        self.bounces = 0
+        self.corners = 0
 
-    gui_font = pygame.font.Font(config.font_path, config.gui_font_size)
-    gui_temp = "Bounces: {0}. Corners: {1}"
-    gui = gui_font.render(
-        gui_temp.format(bounces, corners), True, config.gui_text_color
-    )
-    gui_rect = gui.get_rect(x=0, y=0)
+        self._load_font()
 
-    rect.left = random.randrange(config.window_width - rect.width)
-    rect.top = random.randrange(config.window_height - rect.height)
+        self.gui_temp = "Bounces: {0}. Corners: {1}"
 
-    content_direction = pygame.Vector2(1, 1)
-
-    dt = 0
-
-    running = True
-
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        is_horizontal = False
-        if rect.left < 0 or rect.right >= config.window_width:
-            content_direction.x = -content_direction.x
-            bounces += 1
-
-            is_horizontal = True
-
-        is_vertical = False
-        if rect.top < 0 or rect.bottom >= config.window_height:
-            content_direction.y = -content_direction.y
-            bounces += 1
-
-            is_vertical = True
-
-        if is_horizontal and is_vertical:
-            corners += 1
-
-        if is_horizontal or is_vertical:
-            gui = gui_font.render(
-                gui_temp.format(bounces, corners), True, config.gui_text_color
+        self.contents: list[Content] = [
+            Content(
+                self.config.content,
+                self.content_font,
+                self.config.window_width,
+                self.config.window_height,
+                self.config.speed,
             )
+            for _ in range(self.config.n)
+        ]
 
-        rect.left = rect.left + content_direction.x * config.speed * dt
-        rect.top = rect.top + content_direction.y * config.speed * dt
+        self.gui = self.gui_font.render(
+            self.gui_temp.format(self.bounces, self.corners),
+            True,
+            self.config.gui_text_color,
+        )
+        self.gui_rect = self.gui.get_rect(x=0, y=0)
 
-        screen.fill(config.bg_color)
+        self.running = True
 
-        screen.blit(gui, gui_rect)
+        return self
 
-        screen.blit(text, rect)
+    def __exit__(self, *args):
+        pygame.quit()
+
+    def _load_font(self) -> None:
+        self.gui_font = pygame.font.Font(
+            self.config.font_path, self.config.gui_font_size
+        )
+        self.content_font = pygame.font.Font(
+            self.config.font_path, self.config.content_font_size
+        )
+
+    def run(self):
+        while self.running:
+            self.dt = self.clock.tick(self.config.fps) / 1000
+            self.watch_for_events()
+            self.update()
+            self.draw()
+
+    def watch_for_events(self):
+        for event in pygame.event.get():
+            match event.type:
+                case pygame.QUIT:
+                    self.running = False
+
+    def update(self):
+        self.gui = self.gui_font.render(
+            self.gui_temp.format(self.bounces, self.corners),
+            True,
+            self.config.gui_text_color,
+        )
+        self.gui_rect = self.gui.get_rect(x=0, y=0)
+
+        for content in self.contents:
+            content.update(self.dt)
+            self.bounces += content.bounced
+            self.corners += content.cornered
+
+    def draw(self):
+        self.screen.fill(self.config.bg_color)
+        self.screen.blit(self.gui, self.gui_rect)
+
+        for content in self.contents:
+            content.draw(self.screen)
 
         pygame.display.flip()
 
-        dt = clock.tick(config.fps) / 1000
 
-    pygame.quit()
+def run_game(config: Config):
+    with Game(config) as game:
+        game.run()
 
 
 if __name__ == "__main__":

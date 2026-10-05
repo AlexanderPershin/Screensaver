@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class Config(BaseModel):
+    n: int = Field(default=1, gt=0, le=1000)
+
     window_width: int = Field(default=800, gt=0, le=3840)
     window_height: int = Field(default=600, gt=0, le=2160)
 
