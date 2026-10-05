@@ -1,9 +1,8 @@
 import configparser
-import typing
 from pathlib import Path
 
 import caep
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
@@ -26,34 +25,6 @@ class Config(BaseModel):
     bg_color: str = Field(default="#006699")
     content_text_color: str = Field(default="#009900")
     gui_text_color: str = Field(default="#ffffff")
-
-    @field_validator(
-        "bg_color", "content_text_color", "gui_text_color", mode="before"
-    )
-    @classmethod
-    def validate_hex_color(cls, v: typing.Any) -> str:
-        if not isinstance(v, str):
-            raise TypeError("Допустимы только цвета в виде hex значений")
-
-        v = v.strip()
-        if not v.startswith("#"):
-            raise ValueError('Цвет должен начинаться c "#"')
-
-        hex_part = v[1:]
-        if len(hex_part) not in (6, 8):
-            raise ValueError("Hex-цвет должен иметь 6 или 8 символов после #")
-        try:
-            int(hex_part, 16)
-        except ValueError:
-            raise ValueError("Некорректные hex-символы в цвете")
-        return v
-
-    @field_validator("font_path")
-    @classmethod
-    def validate_font_exists(cls, v: str) -> str:
-        if v and not Path(v).is_file():
-            raise ValueError(f"Файл шрифта не найден: {v}")
-        return v
 
     @classmethod
     def load_from_ini(cls, path: Path = Path("settings.ini")) -> Config:
